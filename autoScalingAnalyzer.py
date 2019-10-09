@@ -5,29 +5,33 @@ class AutoScalingAnalyzer:
     '''Routine to Analyze IOP Provisioned volumes and calculate Gp2 Costs'''
 
     def __init__(self, **kwargs):
-        print("Initialized")
+        ec2 = boto3.client('ec2')
+        self.regions = [region['RegionName']
+                        for region in ec2.describe_regions()['Regions']]
 
     def run(self):
-        autoScale = boto3.client('autoscaling')
-        autoScaleReponse = autoScale.describe_auto_scaling_groups()
         emptyGroups = []
 
-        while True:
-            groups = autoScaleReponse['AutoScalingGroups']
+        for region in self.regions:
+            client = boto3.client('autoscaling', region_name=region)
+            autoScaleReponse = client.describe_auto_scaling_groups()
 
-            for group in groups:
-                loadBalancers = autoScale.describe_load_balancers(
-                    group['AutoScalingGroupName'])['LoadBalancers']
-                if len(group['Instances']) == 0 and len(loadBalancers) == 0:
-                    emptyGroups.append({
-                        'AutoScalingGroupARN': group['AutoScalingGroupARN'],
-                        'AutoScalingGroupName': group['AutoScalingGroupName'],
-                        'AvailabilityZones': group['AvailabilityZones'][0]})
+            while True:
+                groups = autoScaleReponse['AutoScalingGroups']
 
-            if autoScaleReponse['NextToken']:
-                autoScaleReponse = autoScale.describe_auto_scaling_groups(
-                    NextToken=autoScaleReponse['NextToken'])
-            else:
-                break
+                for group in groups:
+                    loadBalancers = client.describe_load_balancers(
+                        group['AutoScalingGroupName'])['LoadBalancers']
+                    if len(group['Instances']) == 0 and len(loadBalancers) == 0:
+                        emptyGroups.append({
+                            'AutoScalingGroupARN': group['AutoScalingGroupARN'],
+                            'AutoScalingGroupName': group['AutoScalingGroupName'],
+                            'AvailabilityZones': group['AvailabilityZones']})
+
+                if 'NextToken' in autoScaleReponse:
+                    autoScaleReponse = client.describe_auto_scaling_groups(
+                        NextToken=autoScaleReponse['NextToken'])
+                else:
+                    break
 
         return emptyGroups

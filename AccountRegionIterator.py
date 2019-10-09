@@ -6,6 +6,7 @@ from typing import (
     Dict,
     List,
 )
+from autoScalingAnalyzer import AutoScalingAnalyzer
 
 logger = logging.getLogger()
 logger.setLevel(logging.WARNING)
@@ -50,50 +51,6 @@ class Iterator():
             regions_List.append(region['RegionName'])
         return regions_List
 
-    def lambda_client(self):
-        '''Instantiate a thread-safe Lambda client'''
-        session = boto3.session.Session()
-        return session.client('lambda')
-
-    def invoke_lambda(self,
-                      *,
-                      function_name: str,
-                      payload,
-                      invocation_type: str,
-                      log_type: str = 'None',
-                      ) -> Dict:
-        '''Invoke a Lambda function
-
-        :arg function_name: name of the function to invoke
-        :arg invocation_type: one of these options:
-            'RequestResponse': synchronous call, will wait for Lambda processing
-            'Event': asynchronous call, will NOT wait for Lambda processing
-            'DryRun': validate param values and user permission
-        :arg payload: payload data to submit to the Lambda function
-        :arg log_type: one of these options:
-            'None': does not include execution logs in the response
-            'Tail': includes execution logs in the response
-        '''
-        aws_lambda = self.lambda_client()
-
-        response = aws_lambda.invoke(
-            FunctionName=function_name,
-            InvocationType=invocation_type,
-            LogType=log_type,
-            Payload=json.dumps(payload),
-        )
-
-        # Decode response payload
-        try:
-            payload = response['Payload'].read(amt=None).decode('utf-8')
-            response['Payload'] = json.loads(payload)
-
-        except (TypeError, json.decoder.JSONDecodeError):
-            logger.warning('Unable to parse Lambda Payload JSON response.')
-            response['Payload'] = None
-
-        return response
-
     def run(self):
         accessKeys = self.get_Access_Keys()
         client = boto3.client(
@@ -110,10 +67,9 @@ class Iterator():
             regions = self.get_Regions(accessKeys)
 
             with concurrent.futures.ThreadPoolExecutor(len(regions)) as executor:
+                autoScalingAnalyzer = AutoScalingAnalyzer()
                 invoke_futures = [
-                    executor.submit(self.invoke_lambda(function_name=self.lambda_function,
-                                                       payload=self.lambda_event, invocation_type='RequestResponse',
-                                                       log_type='Tail'))
+                    executor.submit(autoScalingAnalyzer.run())
                     for region in regions
                 ]
 
