@@ -10,6 +10,7 @@ class AutoScalingAnalyzer:
         self.accessKeyId = kwargs['AccessKeyId']
         self.secretKey = kwargs['SecretAccessKey']
         self.session = kwargs['SessionToken']
+        self.shouldConsiderLoadBalancer = 'ConsiderLoadBalancer' in kwargs and kwargs['ConsiderLoadBalancer']
 
     def run(self):
         emptyGroups = []
@@ -26,7 +27,7 @@ class AutoScalingAnalyzer:
             for group in groups:
                 loadBalancers = client.describe_load_balancers(
                     group['AutoScalingGroupName'])['LoadBalancers']
-                if len(group['Instances']) == 0 and len(loadBalancers) == 0:
+                if len(group['Instances']) == 0 and (not self.shouldConsiderLoadBalancer or len(loadBalancers) == 0):
                     emptyGroups.append({
                         'AutoScalingGroupARN': group['AutoScalingGroupARN'],
                         'AutoScalingGroupName': group['AutoScalingGroupName'],
